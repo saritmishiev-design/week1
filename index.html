@@ -3,494 +3,642 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Falling Sand</title>
+<title>Neon Evolution</title>
 <style>
   :root {
-    --bg: #0b0b14;
-    --panel: #161625;
-    --border: #2a2a40;
-    --text: #e8e8f0;
-    --muted: #8a8aa3;
-    --accent: #ffb347;
+    --bg: #0B0C10;
+    --cyan: #00f0ff;
+    --magenta: #ff2bd6;
+    --violet: #b026ff;
+    --green: #39ff14;
+    --text: #e6f7ff;
+    --muted: #7d8aa3;
+    --glass: rgba(18, 20, 30, 0.62);
+    --edge: rgba(0, 240, 255, 0.18);
   }
   * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
   body {
-    margin: 0;
-    min-height: 100vh;
-    background: radial-gradient(ellipse at top, #1a1a2e, var(--bg) 70%);
     color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 16px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  h1 {
-    margin: 4px 0 2px;
-    font-size: clamp(1.6rem, 4vw, 2.4rem);
-    letter-spacing: 0.04em;
-    background: linear-gradient(90deg, #ffd27a, #ff6a2a, #4aa3ff);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-  .subtitle { color: var(--muted); margin: 0 0 14px; font-size: 0.95rem; }
-  .app { width: 100%; max-width: 1100px; }
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px 12px 0 0;
-    padding: 10px;
-  }
-  .tool {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 7px 11px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: #1e1e30;
-    color: var(--text);
-    font: inherit;
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: transform 0.08s, border-color 0.15s, background 0.15s;
-  }
-  .tool:hover { transform: translateY(-1px); border-color: #4a4a6a; }
-  .tool.active { border-color: var(--accent); background: #2c2438; box-shadow: 0 0 0 1px var(--accent) inset; }
-  .swatch { width: 14px; height: 14px; border-radius: 4px; box-shadow: 0 0 6px currentColor; }
-  .key { color: var(--muted); font-size: 0.75rem; }
   canvas {
+    position: fixed; inset: 0;
+    width: 100vw; height: 100vh;
     display: block;
-    width: 100%;
-    aspect-ratio: 240 / 150;
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-    background: #0c0c14;
-    border-left: 1px solid var(--border);
-    border-right: 1px solid var(--border);
     cursor: crosshair;
     touch-action: none;
   }
+  .vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 3px);
+  }
+  .glass {
+    background: var(--glass);
+    border: 1px solid var(--edge);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 14px;
+    box-shadow: 0 0 24px rgba(0, 240, 255, 0.08), inset 0 0 0 1px rgba(255,255,255,0.03);
+  }
+
+  /* ---------- Stats panel ---------- */
+  .panel {
+    position: fixed; top: 16px; left: 16px;
+    width: 270px; padding: 16px 18px;
+  }
+  .title {
+    margin: 0 0 12px;
+    font-size: 1.05rem; font-weight: 800; letter-spacing: 0.18em;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.45));
+  }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .stat .label {
+    font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  }
+  .stat .value {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .stat .value.cyan { color: var(--cyan); text-shadow: 0 0 10px rgba(0,240,255,0.6); }
+  .stat .value.magenta { color: var(--magenta); text-shadow: 0 0 10px rgba(255,43,214,0.6); }
+  .stat .value.green { color: var(--green); text-shadow: 0 0 10px rgba(57,255,20,0.5); }
+
+  .progress-wrap { margin-top: 14px; }
+  .progress-head {
+    display: flex; justify-content: space-between;
+    font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .progress-head span:last-child { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0; }
+  .progress {
+    height: 8px; border-radius: 99px; overflow: hidden;
+    background: rgba(255,255,255,0.06);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .progress-bar {
+    height: 100%; width: 0%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    box-shadow: 0 0 12px rgba(255, 43, 214, 0.7);
+  }
+  .chart-label {
+    margin-top: 14px; margin-bottom: 4px;
+    font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  }
+  #chart { position: static; width: 100%; height: 54px; cursor: default; }
+
+  /* ---------- Buttons ---------- */
+  .corner {
+    position: fixed; top: 16px; right: 16px;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    color: var(--text); text-decoration: none;
+    font-size: 0.85rem; font-weight: 600; letter-spacing: 0.04em;
+    transition: transform 0.15s, box-shadow 0.2s, border-color 0.2s;
+  }
+  .corner:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 179, 71, 0.6);
+    box-shadow: 0 0 22px rgba(255, 179, 71, 0.3);
+  }
+  .corner .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #ffb347; box-shadow: 0 0 10px #ffb347;
+  }
   .controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 14px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 0 0 12px 12px;
-    padding: 10px 12px;
-    font-size: 0.9rem;
+    position: fixed; right: 16px; bottom: 16px;
+    display: flex; gap: 8px; padding: 8px;
   }
-  .controls label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-  .controls input[type=range] { accent-color: var(--accent); width: 120px; }
   .btn {
-    padding: 7px 14px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: #24243a;
-    color: var(--text);
-    font: inherit;
-    cursor: pointer;
+    padding: 8px 14px; border-radius: 9px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: var(--text); font: inherit; font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
   }
-  .btn:hover { border-color: #4a4a6a; }
-  .btn.primary { background: linear-gradient(135deg, #ff8a3d, #e0452b); border-color: transparent; font-weight: 600; }
-  .stats { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .hint { color: var(--muted); font-size: 0.85rem; margin-top: 10px; text-align: center; line-height: 1.6; }
-  .hint b { color: var(--text); }
-  @media (max-width: 600px) {
-    .tool .key { display: none; }
-    .stats { margin-left: 0; width: 100%; }
+  .btn:hover { border-color: var(--cyan); box-shadow: 0 0 14px rgba(0,240,255,0.35); }
+  .btn.danger:hover { border-color: var(--magenta); box-shadow: 0 0 14px rgba(255,43,214,0.35); }
+  .hint {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    padding: 9px 16px; font-size: 0.8rem; color: var(--muted); white-space: nowrap;
+  }
+  .hint b { color: var(--text); font-weight: 600; }
+
+  /* ---------- Generation toast ---------- */
+  .toast {
+    position: fixed; top: 22px; left: 50%;
+    transform: translate(-50%, -20px);
+    padding: 10px 20px; font-size: 0.9rem; font-weight: 600;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.35s, transform 0.35s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast .gen { color: var(--cyan); }
+  .toast .hit { color: var(--green); }
+
+  @media (max-width: 760px) {
+    .panel { width: auto; right: 16px; padding: 12px 14px; }
+    .stats { grid-template-columns: repeat(4, 1fr); }
+    .stat .value { font-size: 1rem; }
+    #chart, .chart-label { display: none; }
+    .corner { top: auto; bottom: 72px; right: 16px; }
+    .hint { display: none; }
+    .controls { left: 16px; justify-content: center; flex-wrap: wrap; }
   }
 </style>
 </head>
 <body>
-  <h1>Falling Sand</h1>
-  <p class="subtitle">A pixel physics sandbox: every grain follows its own rules</p>
+  <canvas id="world"></canvas>
+  <div class="vignette"></div>
 
-  <div class="app">
-    <div class="toolbar" id="toolbar"></div>
-    <canvas id="canvas" width="240" height="150"></canvas>
-    <div class="controls">
-      <label>Brush <input type="range" id="brush" min="1" max="12" value="4"> <span id="brushVal">4</span></label>
-      <button class="btn" id="pauseBtn">Pause</button>
-      <button class="btn" id="clearBtn">Clear</button>
-      <button class="btn primary" id="demoBtn">Demo scene</button>
-      <span class="stats" id="stats"></span>
+  <div class="panel glass">
+    <h1 class="title">NEON EVOLUTION</h1>
+    <div class="stats">
+      <div class="stat"><div class="label">Generation</div><div class="value cyan" id="gen">1</div></div>
+      <div class="stat"><div class="label">Best Fitness</div><div class="value magenta" id="best">0.0</div></div>
+      <div class="stat"><div class="label">Reached</div><div class="value green" id="reached">0</div></div>
+      <div class="stat"><div class="label">Alive</div><div class="value" id="alive">0</div></div>
     </div>
+    <div class="progress-wrap">
+      <div class="progress-head"><span>Generation timer</span><span id="timer">0.0s</span></div>
+      <div class="progress"><div class="progress-bar" id="bar"></div></div>
+    </div>
+    <div class="chart-label">Best fitness per generation</div>
+    <canvas id="chart"></canvas>
   </div>
 
-  <p class="hint">
-    Click and drag to paint. Keys <b>1–9</b> pick a material, <b>0</b> is the eraser, <b>Space</b> pauses, <b>C</b> clears.<br>
-    Try it: pour <b>oil</b> on <b>water</b> and set it on <b>fire</b>, or drop <b>lava</b> into water and watch it turn to stone.
-  </p>
+  <a class="corner glass" href="sand.html"><span class="dot"></span>Play Falling Sand</a>
+
+  <div class="hint glass">
+    <b>Drag</b> to draw walls · <b>Right-drag</b> to erase · <b>Space</b> pause · <b>C</b> clear · <b>R</b> restart
+  </div>
+
+  <div class="controls glass">
+    <button class="btn" id="speedBtn">Speed 1×</button>
+    <button class="btn" id="pauseBtn">Pause</button>
+    <button class="btn danger" id="clearBtn">Clear walls</button>
+    <button class="btn danger" id="resetBtn">Restart AI</button>
+  </div>
+
+  <div class="toast glass" id="toast"></div>
 
 <script>
 (() => {
-  // ---------- Grid ----------
-  const W = 240, H = 150, N = W * H;
+  // ================= Configuration =================
+  const WW = 1600, WH = 900;          // logical world size (scaled to fit the screen)
+  const POP = 300;                    // agents per generation
+  const LIFE = 330;                   // simulation steps per generation (5.5 s at 60 steps/s)
+  const STEP_DT = 1 / 60;
+  const MAX_FORCE = 0.45;             // magnitude of each gene's thrust vector
+  const MAX_SPEED = 7;
+  const MUTATION = 0.012;             // chance each gene is replaced with a random one
+  const ELITES = 4;                   // best agents copied unchanged into the next generation
+  const WALL_HALF = 6;                // half-thickness of walls for collisions
+  const AGENT_R = 2;
 
-  const EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, FIRE = 4, PLANT = 5,
-        OIL = 6, LAVA = 7, STONE = 8, STEAM = 9, ERASER = 255;
+  const START = { x: WW / 2, y: WH - 60 };
+  const TARGET = { x: WW / 2, y: 90, r: 24 };
+  const START_DIST = Math.hypot(START.x - TARGET.x, START.y - TARGET.y);
 
-  const type  = new Uint8Array(N);   // element in each cell
-  const life  = new Uint8Array(N);   // remaining lifetime (fire, steam)
-  const shade = new Uint8Array(N);   // per-grain color variation 0..15
-  const stamp = new Uint16Array(N);  // last tick this cell was updated
-  let tick = 1, frame = 0;
+  // ================= Population state =================
+  // Each genome is LIFE thrust vectors stored as [x0, y0, x1, y1, ...]
+  let genes = [];
+  const px = new Float32Array(POP), py = new Float32Array(POP);
+  const ox = new Float32Array(POP), oy = new Float32Array(POP);  // previous position (for trails)
+  const vx = new Float32Array(POP), vy = new Float32Array(POP);
+  const state = new Uint8Array(POP);      // 0 alive, 1 crashed, 2 reached target
+  const minDist = new Float32Array(POP);
+  const reachStep = new Int32Array(POP);
+  const fitness = new Float64Array(POP);
 
-  // Higher density sinks below lower density. 255 = immovable.
-  const DENSITY = [0, 255, 4, 2, 0, 255, 1, 3, 255, 0];
-  const isFluid = t => t === WATER || t === OIL || t === LAVA;
-  const isGas = t => t === FIRE || t === STEAM;
+  let generation = 1, step = 0, reachedCount = 0;
+  let bestScore = 0, allTimeBest = 0;
+  const history = [];
 
-  const rand = () => Math.random();
-  const randDir = () => (rand() < 0.5 ? -1 : 1);
-  const inBounds = (x, y) => x >= 0 && x < W && y >= 0 && y < H;
-
-  function set(i, t) {
-    type[i] = t;
-    shade[i] = (rand() * 16) | 0;
-    life[i] = t === FIRE ? 20 + ((rand() * 40) | 0)
-            : t === STEAM ? 60 + ((rand() * 80) | 0)
-            : 0;
+  function randomGene(g, k) {
+    const a = Math.random() * Math.PI * 2;
+    g[2 * k] = Math.cos(a) * MAX_FORCE;
+    g[2 * k + 1] = Math.sin(a) * MAX_FORCE;
+  }
+  function randomGenome() {
+    const g = new Float32Array(LIFE * 2);
+    for (let k = 0; k < LIFE; k++) randomGene(g, k);
+    return g;
   }
 
-  function swap(i, j) {
-    let t = type[i]; type[i] = type[j]; type[j] = t;
-    t = life[i]; life[i] = life[j]; life[j] = t;
-    t = shade[i]; shade[i] = shade[j]; shade[j] = t;
-    stamp[i] = tick; stamp[j] = tick;
+  function spawn() {
+    for (let i = 0; i < POP; i++) {
+      px[i] = ox[i] = START.x; py[i] = oy[i] = START.y;
+      vx[i] = vy[i] = 0;
+      state[i] = 0;
+      minDist[i] = START_DIST;
+      reachStep[i] = LIFE;
+    }
+    step = 0;
+    reachedCount = 0;
   }
 
-  // Can a particle of type s move into a cell holding d?
-  function canDisplace(s, d) {
-    if (d === EMPTY) return true;
-    if (isFluid(d) || isGas(d)) return DENSITY[d] < DENSITY[s];
+  function resetAI() {
+    genes = Array.from({ length: POP }, randomGenome);
+    generation = 1; bestScore = 0; allTimeBest = 0;
+    history.length = 0;
+    spawn();
+    trailClear = true;
+  }
+
+  // ================= Walls =================
+  // Line segments drawn by the user: {x1, y1, x2, y2}
+  let walls = [];
+  function defaultWalls() {
+    walls = [{ x1: 560, y1: 470, x2: 1040, y2: 470 }];
+  }
+
+  function distToSegSq(x, y, s) {
+    const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+    const len = dx * dx + dy * dy;
+    let t = len ? ((x - s.x1) * dx + (y - s.y1) * dy) / len : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const cx = s.x1 + t * dx - x, cy = s.y1 + t * dy - y;
+    return cx * cx + cy * cy;
+  }
+
+  const HIT_SQ = (WALL_HALF + AGENT_R) ** 2;
+  function hitsWall(x, y) {
+    for (let w = 0; w < walls.length; w++) {
+      const s = walls[w];
+      // cheap bounding-box reject before the exact test
+      if (x < Math.min(s.x1, s.x2) - 10 || x > Math.max(s.x1, s.x2) + 10 ||
+          y < Math.min(s.y1, s.y2) - 10 || y > Math.max(s.y1, s.y2) + 10) continue;
+      if (distToSegSq(x, y, s) < HIT_SQ) return true;
+    }
     return false;
   }
 
-  function tryMove(i, x, y, s) {
-    if (!inBounds(x, y)) return false;
-    const j = y * W + x;
-    if (canDisplace(s, type[j])) { swap(i, j); return true; }
-    return false;
-  }
+  // ================= Physics step =================
+  function simulate() {
+    const k2 = step * 2;
+    for (let i = 0; i < POP; i++) {
+      if (state[i] !== 0) continue;
+      const g = genes[i];
+      ox[i] = px[i]; oy[i] = py[i];
+      vx[i] += g[k2]; vy[i] += g[k2 + 1];
+      const sp = Math.hypot(vx[i], vy[i]);
+      if (sp > MAX_SPEED) { vx[i] *= MAX_SPEED / sp; vy[i] *= MAX_SPEED / sp; }
+      px[i] += vx[i]; py[i] += vy[i];
 
-  // ---------- Movement behaviours ----------
-  function powder(i, x, y, s) {
-    if (tryMove(i, x, y + 1, s)) return;
-    const d = randDir();
-    if (tryMove(i, x + d, y + 1, s)) return;
-    tryMove(i, x - d, y + 1, s);
-  }
-
-  function liquid(i, x, y, s, spread) {
-    if (tryMove(i, x, y + 1, s)) return;
-    const d = randDir();
-    if (tryMove(i, x + d, y + 1, s)) return;
-    if (tryMove(i, x - d, y + 1, s)) return;
-    // Flow sideways up to `spread` cells
-    for (const dd of [d, -d]) {
-      let nx = x;
-      for (let k = 1; k <= spread; k++) {
-        const tx = x + dd * k;
-        if (!inBounds(tx, y) || !canDisplace(s, type[y * W + tx])) break;
-        nx = tx;
+      if (px[i] < 0 || px[i] > WW || py[i] < 0 || py[i] > WH || hitsWall(px[i], py[i])) {
+        state[i] = 1;
+        continue;
       }
-      if (nx !== x) { swap(i, y * W + nx); return; }
-    }
-  }
-
-  function gas(i, x, y) {
-    const nx = x + ((rand() * 3) | 0) - 1;
-    if (!inBounds(nx, y - 1)) return;
-    const j = (y - 1) * W + nx;
-    const t = type[j];
-    // Rise into empty space, or bubble up through liquids
-    if (t === EMPTY || (isFluid(t) && t !== LAVA && rand() < 0.3)) swap(i, j);
-  }
-
-  // ---------- Reactions ----------
-  const N8 = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
-
-  function updateFire(i, x, y) {
-    if (--life[i] === 0) { type[i] = EMPTY; return; }
-    for (const [dx, dy] of N8) {
-      const nx = x + dx, ny = y + dy;
-      if (!inBounds(nx, ny)) continue;
-      const j = ny * W + nx, t = type[j];
-      if (t === PLANT && rand() < 0.04) { set(j, FIRE); stamp[j] = tick; }
-      else if (t === OIL && rand() < 0.2) { set(j, FIRE); life[j] += 30; stamp[j] = tick; }
-      else if (t === WATER) {
-        type[i] = EMPTY;
-        if (rand() < 0.3) { set(j, STEAM); stamp[j] = tick; }
-        return;
+      const d = Math.hypot(px[i] - TARGET.x, py[i] - TARGET.y);
+      if (d < minDist[i]) minDist[i] = d;
+      if (d < TARGET.r) {
+        state[i] = 2;
+        reachStep[i] = step;
+        minDist[i] = 0;
+        reachedCount++;
       }
     }
-    if (rand() < 0.5) gas(i, x, y);
+    step++;
+
+    let alive = 0;
+    for (let i = 0; i < POP; i++) if (state[i] === 0) alive++;
+    if (step >= LIFE || alive === 0) evolve();
   }
 
-  function updateLava(i, x, y) {
-    for (const [dx, dy] of N8) {
-      const nx = x + dx, ny = y + dy;
-      if (!inBounds(nx, ny)) continue;
-      const j = ny * W + nx, t = type[j];
-      if (t === WATER) {
-        set(i, STONE);
-        set(j, STEAM); stamp[j] = tick;
-        return;
+  // ================= Genetic algorithm =================
+  // Score shown in the UI: 0-100 for how close the agent got, up to 150 if it reached
+  // the target (faster arrivals earn more).
+  function scoreOf(i) {
+    if (state[i] === 2) return 100 + 50 * (1 - reachStep[i] / LIFE);
+    return 100 * Math.max(0, 1 - minDist[i] / START_DIST);
+  }
+
+  function evolve() {
+    // 1. Evaluate fitness
+    let total = 0;
+    bestScore = 0;
+    for (let i = 0; i < POP; i++) {
+      const s = scoreOf(i);
+      if (s > bestScore) bestScore = s;
+      let f = Math.pow(s / 100, 4);          // sharpen: small gains near the goal matter a lot
+      if (state[i] === 1) f *= 0.5;          // crashing is penalised
+      fitness[i] = f;
+      total += f;
+    }
+    allTimeBest = Math.max(allTimeBest, bestScore);
+    history.push(bestScore);
+    if (history.length > 60) history.shift();
+    showToast(generation, reachedCount);
+
+    // 2. Elitism: keep the very best genomes as-is
+    const order = Array.from({ length: POP }, (_, i) => i).sort((a, b) => fitness[b] - fitness[a]);
+    const next = [];
+    for (let e = 0; e < ELITES; e++) next.push(genes[order[e]].slice());
+
+    // 3. Roulette-wheel selection over cumulative fitness
+    const cumulative = new Float64Array(POP);
+    let acc = 0;
+    for (let i = 0; i < POP; i++) { acc += fitness[i]; cumulative[i] = acc; }
+    function pick() {
+      if (total <= 0) return genes[(Math.random() * POP) | 0];
+      const r = Math.random() * total;
+      let lo = 0, hi = POP - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (cumulative[mid] < r) lo = mid + 1; else hi = mid;
       }
-      if ((t === PLANT || t === OIL) && rand() < 0.3) { set(j, FIRE); stamp[j] = tick; }
+      return genes[lo];
     }
-    // Occasional spark above the surface
-    if (y > 0 && type[i - W] === EMPTY && rand() < 0.004) { set(i - W, FIRE); life[i - W] = 8; }
-    if (rand() < 0.45) liquid(i, x, y, LAVA, 1);
+
+    // 4. Crossover + mutation
+    while (next.length < POP) {
+      const a = pick(), b = pick();
+      const child = new Float32Array(LIFE * 2);
+      const cut = ((Math.random() * LIFE) | 0) * 2;   // single-point crossover
+      child.set(a.subarray(0, cut), 0);
+      child.set(b.subarray(cut), cut);
+      for (let k = 0; k < LIFE; k++) if (Math.random() < MUTATION) randomGene(child, k);
+      next.push(child);
+    }
+
+    genes = next;
+    generation++;
+    spawn();
   }
 
-  function updatePlant(i, x, y) {
-    if (rand() > 0.08) return;
-    const [dx, dy] = N8[(rand() * 8) | 0];
-    const nx = x + dx, ny = y + dy;
-    if (!inBounds(nx, ny)) return;
-    const j = ny * W + nx;
-    if (type[j] === WATER) { set(j, PLANT); stamp[j] = tick; }
-  }
-
-  function updateSteam(i, x, y) {
-    if (--life[i] === 0) {
-      if (rand() < 0.35) set(i, WATER); else type[i] = EMPTY;
-      return;
-    }
-    gas(i, x, y);
-    if (stamp[i] !== tick) { // didn't rise: drift sideways
-      const nx = x + randDir();
-      if (inBounds(nx, y) && type[y * W + nx] === EMPTY) swap(i, y * W + nx);
-    }
-  }
-
-  // ---------- Simulation step ----------
-  function step() {
-    tick = tick === 65535 ? 1 : tick + 1;
-    const ltr = frame & 1;
-    for (let y = H - 1; y >= 0; y--) {
-      for (let k = 0; k < W; k++) {
-        const x = ltr ? k : W - 1 - k;
-        const i = y * W + x;
-        const t = type[i];
-        if (t === EMPTY || t === WALL || t === STONE || stamp[i] === tick) continue;
-        stamp[i] = tick;
-        switch (t) {
-          case SAND:  powder(i, x, y, SAND); break;
-          case WATER: liquid(i, x, y, WATER, 4); break;
-          case OIL:   liquid(i, x, y, OIL, 3); break;
-          case FIRE:  updateFire(i, x, y); break;
-          case LAVA:  updateLava(i, x, y); break;
-          case PLANT: updatePlant(i, x, y); break;
-          case STEAM: updateSteam(i, x, y); break;
-        }
-      }
-    }
-  }
-
-  // ---------- Rendering ----------
-  const canvas = document.getElementById('canvas');
+  // ================= Rendering =================
+  const canvas = document.getElementById('world');
   const ctx = canvas.getContext('2d');
-  const img = ctx.createImageData(W, H);
-  const pix = new Uint32Array(img.data.buffer);
-  const rgba = (r, g, b) => (255 << 24) | (b << 16) | (g << 8) | r;
-  const clamp = v => Math.max(0, Math.min(255, v | 0));
+  let dpr = 1, scale = 1, offX = 0, offY = 0, trailClear = true;
 
-  const BASE = {
-    [WALL]:  [120, 120, 135], [SAND]:  [222, 190, 122], [WATER]: [48, 118, 228],
-    [PLANT]: [58, 176, 72],   [OIL]:   [92, 62, 44],    [LAVA]:  [255, 96, 24],
-    [STONE]: [78, 72, 82],    [STEAM]: [196, 206, 228],
-  };
-  // 16 shade variants per element
-  const palette = new Uint32Array(256 * 16);
-  for (const t in BASE) {
-    const [r, g, b] = BASE[t];
-    for (let v = 0; v < 16; v++) {
-      const f = 0.82 + v * 0.025;
-      palette[t * 16 + v] = rgba(clamp(r * f), clamp(g * f), clamp(b * f));
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    scale = Math.min(innerWidth / WW, innerHeight / WH);
+    offX = (innerWidth - WW * scale) / 2;
+    offY = (innerHeight - WH * scale) / 2;
+    trailClear = true;
+    resizeChart();
+  }
+  window.addEventListener('resize', resize);
+
+  function worldTransform() {
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, offX * dpr, offY * dpr);
+  }
+
+  function render(time) {
+    // Fade the previous frame instead of clearing: this leaves light trails behind agents
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = trailClear ? '#0B0C10' : 'rgba(11, 12, 16, 0.2)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    trailClear = false;
+
+    worldTransform();
+
+    // Arena border
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.12)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, WW - 2, WH - 2);
+
+    // Start pad
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(START.x, START.y, 14, 0, Math.PI * 2); ctx.stroke();
+
+    // Pulsating target
+    const pulse = 0.5 + 0.5 * Math.sin(time / 260);
+    const glowR = TARGET.r * (2.6 + pulse * 1.4);
+    const grad = ctx.createRadialGradient(TARGET.x, TARGET.y, 0, TARGET.x, TARGET.y, glowR);
+    grad.addColorStop(0, 'rgba(57, 255, 20, 0.9)');
+    grad.addColorStop(0.35, 'rgba(57, 255, 20, 0.35)');
+    grad.addColorStop(1, 'rgba(57, 255, 20, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(TARGET.x, TARGET.y, glowR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(200, 255, 190, ${0.6 + pulse * 0.4})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(TARGET.x, TARGET.y, TARGET.r * (0.8 + pulse * 0.25), 0, Math.PI * 2); ctx.stroke();
+
+    // Walls: violet glow with a bright core
+    if (walls.length) {
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (const s of walls) { ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); }
+      ctx.shadowColor = '#b026ff';
+      ctx.shadowBlur = 22;
+      ctx.strokeStyle = 'rgba(176, 38, 255, 0.9)';
+      ctx.lineWidth = WALL_HALF * 2;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(245, 225, 255, 0.95)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
     }
-  }
-  // Fire colors indexed by remaining life: red embers -> yellow-white core
-  const fireColors = new Uint32Array(256);
-  for (let l = 0; l < 256; l++) {
-    const k = Math.min(1, l / 50);
-    fireColors[l] = rgba(255, clamp(60 + 190 * k), clamp(30 + 120 * k * k));
-  }
-  const BG = rgba(12, 12, 20);
 
-  function render() {
-    for (let i = 0; i < N; i++) {
-      const t = type[i];
-      if (t === EMPTY) pix[i] = BG;
-      else if (t === FIRE) pix[i] = fireColors[life[i]];
-      else if (t === LAVA) pix[i] = palette[LAVA * 16 + ((shade[i] + (frame >> 2)) & 15)];
-      else pix[i] = palette[t * 16 + shade[i]];
+    // Agents: additive blending makes overlapping trails glow
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    const groups = [
+      { color: 'rgba(0, 240, 255, 0.85)',  glow: 'rgba(0, 240, 255, 0.10)',  parity: 0 },
+      { color: 'rgba(255, 43, 214, 0.85)', glow: 'rgba(255, 43, 214, 0.10)', parity: 1 },
+    ];
+    for (const grp of groups) {
+      // trail segment for this step
+      ctx.strokeStyle = grp.color;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      for (let i = ELITES + grp.parity; i < POP; i += 2) {
+        if (state[i] !== 0) continue;
+        ctx.moveTo(ox[i], oy[i]); ctx.lineTo(px[i], py[i]);
+      }
+      ctx.stroke();
+      // soft halo around each head
+      ctx.fillStyle = grp.glow;
+      ctx.beginPath();
+      for (let i = ELITES + grp.parity; i < POP; i += 2) {
+        if (state[i] === 1) continue;
+        ctx.moveTo(px[i] + 7, py[i]); ctx.arc(px[i], py[i], 7, 0, Math.PI * 2);
+      }
+      ctx.fill();
     }
-    ctx.putImageData(img, 0, 0);
+    // Elites (last generation's champions) shine white
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i < ELITES; i++) {
+      if (state[i] !== 0) continue;
+      ctx.moveTo(ox[i], oy[i]); ctx.lineTo(px[i], py[i]);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i < ELITES; i++) {
+      if (state[i] === 1) continue;
+      ctx.moveTo(px[i] + 9, py[i]); ctx.arc(px[i], py[i], 9, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    // Crash sparks
+    ctx.fillStyle = 'rgba(255, 90, 120, 0.35)';
+    ctx.beginPath();
+    for (let i = 0; i < POP; i++) {
+      if (state[i] !== 1) continue;
+      ctx.moveTo(px[i] + 2, py[i]); ctx.arc(px[i], py[i], 2, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
   }
 
-  // ---------- Tools / UI ----------
-  const TOOLS = [
-    { id: SAND,   name: 'Sand',   key: '1', color: '#debe7a' },
-    { id: WATER,  name: 'Water',  key: '2', color: '#3076e4' },
-    { id: WALL,   name: 'Wall',   key: '3', color: '#787887' },
-    { id: FIRE,   name: 'Fire',   key: '4', color: '#ff8a1e' },
-    { id: PLANT,  name: 'Plant',  key: '5', color: '#3ab048' },
-    { id: OIL,    name: 'Oil',    key: '6', color: '#7a5236' },
-    { id: LAVA,   name: 'Lava',   key: '7', color: '#ff6018' },
-    { id: STEAM,  name: 'Steam',  key: '8', color: '#c4cee4' },
-    { id: STONE,  name: 'Stone',  key: '9', color: '#5a5462' },
-    { id: ERASER, name: 'Eraser', key: '0', color: '#e8e8f0' },
-  ];
-  let current = SAND;
-  const toolbar = document.getElementById('toolbar');
-  for (const tool of TOOLS) {
-    const b = document.createElement('button');
-    b.className = 'tool';
-    b.dataset.id = tool.id;
-    b.innerHTML = `<span class="swatch" style="background:${tool.color};color:${tool.color}"></span>${tool.name} <span class="key">${tool.key}</span>`;
-    b.onclick = () => selectTool(tool.id);
-    toolbar.appendChild(b);
-  }
-  function selectTool(id) {
-    current = id;
-    for (const b of toolbar.children) b.classList.toggle('active', +b.dataset.id === id);
-  }
-  selectTool(SAND);
+  // ================= UI overlay =================
+  const $ = id => document.getElementById(id);
+  const genEl = $('gen'), bestEl = $('best'), reachedEl = $('reached'), aliveEl = $('alive');
+  const barEl = $('bar'), timerEl = $('timer');
 
-  const brushInput = document.getElementById('brush');
-  const brushVal = document.getElementById('brushVal');
-  brushInput.oninput = () => { brushVal.textContent = brushInput.value; };
+  function updateUI() {
+    let alive = 0;
+    for (let i = 0; i < POP; i++) if (state[i] === 0) alive++;
+    genEl.textContent = generation;
+    bestEl.textContent = bestScore.toFixed(1);
+    reachedEl.textContent = reachedCount;
+    aliveEl.textContent = alive;
+    barEl.style.width = (step / LIFE * 100).toFixed(2) + '%';
+    timerEl.textContent = `${(step * STEP_DT).toFixed(1)}s / ${(LIFE * STEP_DT).toFixed(1)}s`;
+  }
 
-  let paused = false;
-  const pauseBtn = document.getElementById('pauseBtn');
-  function togglePause() { paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; }
+  const chart = $('chart');
+  const cctx = chart.getContext('2d');
+  function resizeChart() {
+    const r = chart.getBoundingClientRect();
+    chart.width = Math.max(1, Math.floor(r.width * dpr));
+    chart.height = Math.max(1, Math.floor(r.height * dpr));
+    drawChart();
+  }
+  function drawChart() {
+    const w = chart.width, h = chart.height;
+    cctx.clearRect(0, 0, w, h);
+    cctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    cctx.lineWidth = 1;
+    cctx.beginPath(); cctx.moveTo(0, h * (1 - 100 / 150)); cctx.lineTo(w, h * (1 - 100 / 150)); cctx.stroke();
+    if (history.length < 2) return;
+    const xs = i => (i / (history.length - 1)) * w;
+    const ys = v => h - 2 - (v / 150) * (h - 4);
+    const fill = cctx.createLinearGradient(0, 0, 0, h);
+    fill.addColorStop(0, 'rgba(255, 43, 214, 0.35)');
+    fill.addColorStop(1, 'rgba(255, 43, 214, 0)');
+    cctx.beginPath();
+    cctx.moveTo(0, h);
+    history.forEach((v, i) => cctx.lineTo(xs(i), ys(v)));
+    cctx.lineTo(w, h);
+    cctx.fillStyle = fill;
+    cctx.fill();
+    const line = cctx.createLinearGradient(0, 0, w, 0);
+    line.addColorStop(0, '#00f0ff'); line.addColorStop(1, '#ff2bd6');
+    cctx.beginPath();
+    history.forEach((v, i) => (i ? cctx.lineTo(xs(i), ys(v)) : cctx.moveTo(xs(i), ys(v))));
+    cctx.strokeStyle = line;
+    cctx.lineWidth = 2 * dpr;
+    cctx.stroke();
+  }
+
+  const toast = $('toast');
+  let toastTimer;
+  function showToast(gen, hits) {
+    toast.innerHTML = hits
+      ? `<span class="gen">Generation ${gen}</span> · <span class="hit">${hits} reached the target</span>`
+      : `<span class="gen">Generation ${gen}</span> · evolving…`;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1600);
+    drawChart();
+  }
+
+  // ================= Controls =================
+  let paused = false, speedIdx = 0;
+  const SPEEDS = [1, 2, 4];
+  const speedBtn = $('speedBtn'), pauseBtn = $('pauseBtn');
+  function cycleSpeed() {
+    speedIdx = (speedIdx + 1) % SPEEDS.length;
+    speedBtn.textContent = `Speed ${SPEEDS[speedIdx]}×`;
+  }
+  function togglePause() {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  }
+  function clearWalls() { walls = []; trailClear = true; }
+  speedBtn.onclick = cycleSpeed;
   pauseBtn.onclick = togglePause;
-
-  function clearAll() { type.fill(EMPTY); life.fill(0); }
-  document.getElementById('clearBtn').onclick = clearAll;
-  document.getElementById('demoBtn').onclick = demoScene;
+  $('clearBtn').onclick = clearWalls;
+  $('resetBtn').onclick = resetAI;
 
   document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT') return;
-    const tool = TOOLS.find(t => t.key === e.key);
-    if (tool) selectTool(tool.id);
-    else if (e.code === 'Space') { e.preventDefault(); togglePause(); }
-    else if (e.key === 'c' || e.key === 'C') clearAll();
+    if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+    else if (e.key === 'c' || e.key === 'C') clearWalls();
+    else if (e.key === 'r' || e.key === 'R') resetAI();
+    else if (e.key === 's' || e.key === 'S') cycleSpeed();
   });
 
-  // ---------- Painting ----------
-  function paintAt(cx, cy, tool) {
-    const r = +brushInput.value;
-    const solid = tool === WALL || tool === STONE || tool === PLANT;
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (dx * dx + dy * dy > r * r) continue;
-        const x = cx + dx, y = cy + dy;
-        if (!inBounds(x, y)) continue;
-        const i = y * W + x;
-        if (tool === ERASER) { type[i] = EMPTY; continue; }
-        if (type[i] !== EMPTY) continue;
-        if (!solid && rand() > 0.45) continue; // grainy pour
-        set(i, tool);
-      }
-    }
+  // ================= Drawing walls with the mouse =================
+  let mode = null, lastX = 0, lastY = 0;
+  function toWorld(e) {
+    return [(e.clientX - offX) / scale, (e.clientY - offY) / scale];
   }
-
-  function paintLine(x0, y0, x1, y1, tool) {
-    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
-    for (let s = 0; s <= steps; s++) {
-      paintAt(Math.round(x0 + (x1 - x0) * s / steps), Math.round(y0 + (y1 - y0) * s / steps), tool);
-    }
+  function eraseAt(x, y) {
+    const before = walls.length;
+    walls = walls.filter(s => distToSegSq(x, y, s) > 28 * 28);
+    if (walls.length !== before) trailClear = true;
   }
-
-  let drawing = false, px = 0, py = 0;
-  function gridPos(e) {
-    const r = canvas.getBoundingClientRect();
-    return [
-      Math.floor((e.clientX - r.left) / r.width * W),
-      Math.floor((e.clientY - r.top) / r.height * H),
-    ];
-  }
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('pointerdown', e => {
-    drawing = true;
     canvas.setPointerCapture(e.pointerId);
-    [px, py] = gridPos(e);
-    paintAt(px, py, current);
+    [lastX, lastY] = toWorld(e);
+    if (e.button === 2) { mode = 'erase'; eraseAt(lastX, lastY); }
+    else {
+      mode = 'draw';
+      walls.push({ x1: lastX, y1: lastY, x2: lastX + 0.01, y2: lastY }); // a dot is a wall too
+    }
   });
   canvas.addEventListener('pointermove', e => {
-    if (!drawing) return;
-    const [x, y] = gridPos(e);
-    paintLine(px, py, x, y, current);
-    px = x; py = y;
+    if (!mode) return;
+    const [x, y] = toWorld(e);
+    if (mode === 'erase') { eraseAt(x, y); return; }
+    if (Math.hypot(x - lastX, y - lastY) < 6) return;
+    walls.push({ x1: lastX, y1: lastY, x2: x, y2: y });
+    lastX = x; lastY = y;
   });
-  const stop = () => { drawing = false; };
-  canvas.addEventListener('pointerup', stop);
-  canvas.addEventListener('pointercancel', stop);
+  const endStroke = () => { mode = null; };
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
 
-  // ---------- Demo scene ----------
-  function fillRect(x0, y0, x1, y1, t) {
-    for (let y = y0; y <= y1; y++)
-      for (let x = x0; x <= x1; x++)
-        if (inBounds(x, y)) set(y * W + x, t);
-  }
-  function thickLine(x0, y0, x1, y1, t, w) {
-    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-    for (let s = 0; s <= steps; s++) {
-      const x = Math.round(x0 + (x1 - x0) * s / steps);
-      const y = Math.round(y0 + (y1 - y0) * s / steps);
-      fillRect(x, y, x, y + w - 1, t);
-    }
-  }
-  function demoScene() {
-    clearAll();
-    // Stone bowl filled with water, topped with a layer of oil
-    fillRect(90, 98, 92, 146, WALL);
-    fillRect(170, 98, 172, 146, WALL);
-    fillRect(90, 146, 172, 148, WALL);
-    fillRect(93, 120, 169, 145, WATER);
-    fillRect(93, 108, 169, 119, OIL);
-    // Volcano ramp on the left, carrying lava toward the bowl
-    thickLine(4, 38, 110, 84, WALL, 3);
-    fillRect(8, 14, 38, 36, LAVA);
-    // A little garden on the right
-    fillRect(180, 140, 239, 149, PLANT);
-    for (let k = 0; k < 4; k++) {
-      const x = 188 + k * 14, h = 18 + ((rand() * 22) | 0);
-      fillRect(x, 140 - h, x + 1, 139, PLANT);
-    }
-    // Sand pile falling into the garden
-    fillRect(205, 4, 225, 24, SAND);
-    selectTool(FIRE);
-  }
-
-  // ---------- Main loop ----------
-  const stats = document.getElementById('stats');
-  let last = performance.now(), fps = 60;
+  // ================= Main loop (fixed timestep) =================
+  let lastTime = performance.now(), accumulator = 0;
   function loop(now) {
-    if (drawing) paintAt(px, py, current); // hold to keep pouring
-    if (!paused) { step(); frame++; }
-    render();
-    fps = fps * 0.9 + (1000 / Math.max(1, now - last)) * 0.1;
-    last = now;
-    if ((frame & 15) === 0) {
-      let count = 0;
-      for (let i = 0; i < N; i++) if (type[i] !== EMPTY) count++;
-      stats.textContent = `${count.toLocaleString()} particles · ${fps.toFixed(0)} fps`;
+    const dt = Math.min(0.1, (now - lastTime) / 1000);
+    lastTime = now;
+    if (!paused) {
+      accumulator += dt * SPEEDS[speedIdx];
+      let steps = 0;
+      while (accumulator >= STEP_DT && steps < 12) {
+        simulate();
+        accumulator -= STEP_DT;
+        steps++;
+        if (steps > 1) render(now); // keep trails continuous at higher speeds
+      }
+      if (steps > 1) { updateUI(); requestAnimationFrame(loop); return; }
     }
+    render(now);
+    updateUI();
     requestAnimationFrame(loop);
   }
-  demoScene();
-  selectTool(SAND);
+
+  defaultWalls();
+  resetAI();
+  resize();
   requestAnimationFrame(loop);
 })();
 </script>
