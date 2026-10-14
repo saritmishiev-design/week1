@@ -1,12 +1,498 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hello World</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Falling Sand</title>
+<style>
+  :root {
+    --bg: #0b0b14;
+    --panel: #161625;
+    --border: #2a2a40;
+    --text: #e8e8f0;
+    --muted: #8a8aa3;
+    --accent: #ffb347;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at top, #1a1a2e, var(--bg) 70%);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  h1 {
+    margin: 4px 0 2px;
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    letter-spacing: 0.04em;
+    background: linear-gradient(90deg, #ffd27a, #ff6a2a, #4aa3ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .subtitle { color: var(--muted); margin: 0 0 14px; font-size: 0.95rem; }
+  .app { width: 100%; max-width: 1100px; }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+    padding: 10px;
+  }
+  .tool {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #1e1e30;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: transform 0.08s, border-color 0.15s, background 0.15s;
+  }
+  .tool:hover { transform: translateY(-1px); border-color: #4a4a6a; }
+  .tool.active { border-color: var(--accent); background: #2c2438; box-shadow: 0 0 0 1px var(--accent) inset; }
+  .swatch { width: 14px; height: 14px; border-radius: 4px; box-shadow: 0 0 6px currentColor; }
+  .key { color: var(--muted); font-size: 0.75rem; }
+  canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 240 / 150;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #0c0c14;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 0 0 12px 12px;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+  .controls label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .controls input[type=range] { accent-color: var(--accent); width: 120px; }
+  .btn {
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #24243a;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: #4a4a6a; }
+  .btn.primary { background: linear-gradient(135deg, #ff8a3d, #e0452b); border-color: transparent; font-weight: 600; }
+  .stats { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 0.85rem; margin-top: 10px; text-align: center; line-height: 1.6; }
+  .hint b { color: var(--text); }
+  @media (max-width: 600px) {
+    .tool .key { display: none; }
+    .stats { margin-left: 0; width: 100%; }
+  }
+</style>
 </head>
 <body>
-  <h1>Hello, World!</h1>
-  <p>This is a simple HTML page.</p>
+  <h1>Falling Sand</h1>
+  <p class="subtitle">A pixel physics sandbox: every grain follows its own rules</p>
+
+  <div class="app">
+    <div class="toolbar" id="toolbar"></div>
+    <canvas id="canvas" width="240" height="150"></canvas>
+    <div class="controls">
+      <label>Brush <input type="range" id="brush" min="1" max="12" value="4"> <span id="brushVal">4</span></label>
+      <button class="btn" id="pauseBtn">Pause</button>
+      <button class="btn" id="clearBtn">Clear</button>
+      <button class="btn primary" id="demoBtn">Demo scene</button>
+      <span class="stats" id="stats"></span>
+    </div>
+  </div>
+
+  <p class="hint">
+    Click and drag to paint. Keys <b>1–9</b> pick a material, <b>0</b> is the eraser, <b>Space</b> pauses, <b>C</b> clears.<br>
+    Try it: pour <b>oil</b> on <b>water</b> and set it on <b>fire</b>, or drop <b>lava</b> into water and watch it turn to stone.
+  </p>
+
+<script>
+(() => {
+  // ---------- Grid ----------
+  const W = 240, H = 150, N = W * H;
+
+  const EMPTY = 0, WALL = 1, SAND = 2, WATER = 3, FIRE = 4, PLANT = 5,
+        OIL = 6, LAVA = 7, STONE = 8, STEAM = 9, ERASER = 255;
+
+  const type  = new Uint8Array(N);   // element in each cell
+  const life  = new Uint8Array(N);   // remaining lifetime (fire, steam)
+  const shade = new Uint8Array(N);   // per-grain color variation 0..15
+  const stamp = new Uint16Array(N);  // last tick this cell was updated
+  let tick = 1, frame = 0;
+
+  // Higher density sinks below lower density. 255 = immovable.
+  const DENSITY = [0, 255, 4, 2, 0, 255, 1, 3, 255, 0];
+  const isFluid = t => t === WATER || t === OIL || t === LAVA;
+  const isGas = t => t === FIRE || t === STEAM;
+
+  const rand = () => Math.random();
+  const randDir = () => (rand() < 0.5 ? -1 : 1);
+  const inBounds = (x, y) => x >= 0 && x < W && y >= 0 && y < H;
+
+  function set(i, t) {
+    type[i] = t;
+    shade[i] = (rand() * 16) | 0;
+    life[i] = t === FIRE ? 20 + ((rand() * 40) | 0)
+            : t === STEAM ? 60 + ((rand() * 80) | 0)
+            : 0;
+  }
+
+  function swap(i, j) {
+    let t = type[i]; type[i] = type[j]; type[j] = t;
+    t = life[i]; life[i] = life[j]; life[j] = t;
+    t = shade[i]; shade[i] = shade[j]; shade[j] = t;
+    stamp[i] = tick; stamp[j] = tick;
+  }
+
+  // Can a particle of type s move into a cell holding d?
+  function canDisplace(s, d) {
+    if (d === EMPTY) return true;
+    if (isFluid(d) || isGas(d)) return DENSITY[d] < DENSITY[s];
+    return false;
+  }
+
+  function tryMove(i, x, y, s) {
+    if (!inBounds(x, y)) return false;
+    const j = y * W + x;
+    if (canDisplace(s, type[j])) { swap(i, j); return true; }
+    return false;
+  }
+
+  // ---------- Movement behaviours ----------
+  function powder(i, x, y, s) {
+    if (tryMove(i, x, y + 1, s)) return;
+    const d = randDir();
+    if (tryMove(i, x + d, y + 1, s)) return;
+    tryMove(i, x - d, y + 1, s);
+  }
+
+  function liquid(i, x, y, s, spread) {
+    if (tryMove(i, x, y + 1, s)) return;
+    const d = randDir();
+    if (tryMove(i, x + d, y + 1, s)) return;
+    if (tryMove(i, x - d, y + 1, s)) return;
+    // Flow sideways up to `spread` cells
+    for (const dd of [d, -d]) {
+      let nx = x;
+      for (let k = 1; k <= spread; k++) {
+        const tx = x + dd * k;
+        if (!inBounds(tx, y) || !canDisplace(s, type[y * W + tx])) break;
+        nx = tx;
+      }
+      if (nx !== x) { swap(i, y * W + nx); return; }
+    }
+  }
+
+  function gas(i, x, y) {
+    const nx = x + ((rand() * 3) | 0) - 1;
+    if (!inBounds(nx, y - 1)) return;
+    const j = (y - 1) * W + nx;
+    const t = type[j];
+    // Rise into empty space, or bubble up through liquids
+    if (t === EMPTY || (isFluid(t) && t !== LAVA && rand() < 0.3)) swap(i, j);
+  }
+
+  // ---------- Reactions ----------
+  const N8 = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+
+  function updateFire(i, x, y) {
+    if (--life[i] === 0) { type[i] = EMPTY; return; }
+    for (const [dx, dy] of N8) {
+      const nx = x + dx, ny = y + dy;
+      if (!inBounds(nx, ny)) continue;
+      const j = ny * W + nx, t = type[j];
+      if (t === PLANT && rand() < 0.04) { set(j, FIRE); stamp[j] = tick; }
+      else if (t === OIL && rand() < 0.2) { set(j, FIRE); life[j] += 30; stamp[j] = tick; }
+      else if (t === WATER) {
+        type[i] = EMPTY;
+        if (rand() < 0.3) { set(j, STEAM); stamp[j] = tick; }
+        return;
+      }
+    }
+    if (rand() < 0.5) gas(i, x, y);
+  }
+
+  function updateLava(i, x, y) {
+    for (const [dx, dy] of N8) {
+      const nx = x + dx, ny = y + dy;
+      if (!inBounds(nx, ny)) continue;
+      const j = ny * W + nx, t = type[j];
+      if (t === WATER) {
+        set(i, STONE);
+        set(j, STEAM); stamp[j] = tick;
+        return;
+      }
+      if ((t === PLANT || t === OIL) && rand() < 0.3) { set(j, FIRE); stamp[j] = tick; }
+    }
+    // Occasional spark above the surface
+    if (y > 0 && type[i - W] === EMPTY && rand() < 0.004) { set(i - W, FIRE); life[i - W] = 8; }
+    if (rand() < 0.45) liquid(i, x, y, LAVA, 1);
+  }
+
+  function updatePlant(i, x, y) {
+    if (rand() > 0.08) return;
+    const [dx, dy] = N8[(rand() * 8) | 0];
+    const nx = x + dx, ny = y + dy;
+    if (!inBounds(nx, ny)) return;
+    const j = ny * W + nx;
+    if (type[j] === WATER) { set(j, PLANT); stamp[j] = tick; }
+  }
+
+  function updateSteam(i, x, y) {
+    if (--life[i] === 0) {
+      if (rand() < 0.35) set(i, WATER); else type[i] = EMPTY;
+      return;
+    }
+    gas(i, x, y);
+    if (stamp[i] !== tick) { // didn't rise: drift sideways
+      const nx = x + randDir();
+      if (inBounds(nx, y) && type[y * W + nx] === EMPTY) swap(i, y * W + nx);
+    }
+  }
+
+  // ---------- Simulation step ----------
+  function step() {
+    tick = tick === 65535 ? 1 : tick + 1;
+    const ltr = frame & 1;
+    for (let y = H - 1; y >= 0; y--) {
+      for (let k = 0; k < W; k++) {
+        const x = ltr ? k : W - 1 - k;
+        const i = y * W + x;
+        const t = type[i];
+        if (t === EMPTY || t === WALL || t === STONE || stamp[i] === tick) continue;
+        stamp[i] = tick;
+        switch (t) {
+          case SAND:  powder(i, x, y, SAND); break;
+          case WATER: liquid(i, x, y, WATER, 4); break;
+          case OIL:   liquid(i, x, y, OIL, 3); break;
+          case FIRE:  updateFire(i, x, y); break;
+          case LAVA:  updateLava(i, x, y); break;
+          case PLANT: updatePlant(i, x, y); break;
+          case STEAM: updateSteam(i, x, y); break;
+        }
+      }
+    }
+  }
+
+  // ---------- Rendering ----------
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  const pix = new Uint32Array(img.data.buffer);
+  const rgba = (r, g, b) => (255 << 24) | (b << 16) | (g << 8) | r;
+  const clamp = v => Math.max(0, Math.min(255, v | 0));
+
+  const BASE = {
+    [WALL]:  [120, 120, 135], [SAND]:  [222, 190, 122], [WATER]: [48, 118, 228],
+    [PLANT]: [58, 176, 72],   [OIL]:   [92, 62, 44],    [LAVA]:  [255, 96, 24],
+    [STONE]: [78, 72, 82],    [STEAM]: [196, 206, 228],
+  };
+  // 16 shade variants per element
+  const palette = new Uint32Array(256 * 16);
+  for (const t in BASE) {
+    const [r, g, b] = BASE[t];
+    for (let v = 0; v < 16; v++) {
+      const f = 0.82 + v * 0.025;
+      palette[t * 16 + v] = rgba(clamp(r * f), clamp(g * f), clamp(b * f));
+    }
+  }
+  // Fire colors indexed by remaining life: red embers -> yellow-white core
+  const fireColors = new Uint32Array(256);
+  for (let l = 0; l < 256; l++) {
+    const k = Math.min(1, l / 50);
+    fireColors[l] = rgba(255, clamp(60 + 190 * k), clamp(30 + 120 * k * k));
+  }
+  const BG = rgba(12, 12, 20);
+
+  function render() {
+    for (let i = 0; i < N; i++) {
+      const t = type[i];
+      if (t === EMPTY) pix[i] = BG;
+      else if (t === FIRE) pix[i] = fireColors[life[i]];
+      else if (t === LAVA) pix[i] = palette[LAVA * 16 + ((shade[i] + (frame >> 2)) & 15)];
+      else pix[i] = palette[t * 16 + shade[i]];
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // ---------- Tools / UI ----------
+  const TOOLS = [
+    { id: SAND,   name: 'Sand',   key: '1', color: '#debe7a' },
+    { id: WATER,  name: 'Water',  key: '2', color: '#3076e4' },
+    { id: WALL,   name: 'Wall',   key: '3', color: '#787887' },
+    { id: FIRE,   name: 'Fire',   key: '4', color: '#ff8a1e' },
+    { id: PLANT,  name: 'Plant',  key: '5', color: '#3ab048' },
+    { id: OIL,    name: 'Oil',    key: '6', color: '#7a5236' },
+    { id: LAVA,   name: 'Lava',   key: '7', color: '#ff6018' },
+    { id: STEAM,  name: 'Steam',  key: '8', color: '#c4cee4' },
+    { id: STONE,  name: 'Stone',  key: '9', color: '#5a5462' },
+    { id: ERASER, name: 'Eraser', key: '0', color: '#e8e8f0' },
+  ];
+  let current = SAND;
+  const toolbar = document.getElementById('toolbar');
+  for (const tool of TOOLS) {
+    const b = document.createElement('button');
+    b.className = 'tool';
+    b.dataset.id = tool.id;
+    b.innerHTML = `<span class="swatch" style="background:${tool.color};color:${tool.color}"></span>${tool.name} <span class="key">${tool.key}</span>`;
+    b.onclick = () => selectTool(tool.id);
+    toolbar.appendChild(b);
+  }
+  function selectTool(id) {
+    current = id;
+    for (const b of toolbar.children) b.classList.toggle('active', +b.dataset.id === id);
+  }
+  selectTool(SAND);
+
+  const brushInput = document.getElementById('brush');
+  const brushVal = document.getElementById('brushVal');
+  brushInput.oninput = () => { brushVal.textContent = brushInput.value; };
+
+  let paused = false;
+  const pauseBtn = document.getElementById('pauseBtn');
+  function togglePause() { paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; }
+  pauseBtn.onclick = togglePause;
+
+  function clearAll() { type.fill(EMPTY); life.fill(0); }
+  document.getElementById('clearBtn').onclick = clearAll;
+  document.getElementById('demoBtn').onclick = demoScene;
+
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    const tool = TOOLS.find(t => t.key === e.key);
+    if (tool) selectTool(tool.id);
+    else if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+    else if (e.key === 'c' || e.key === 'C') clearAll();
+  });
+
+  // ---------- Painting ----------
+  function paintAt(cx, cy, tool) {
+    const r = +brushInput.value;
+    const solid = tool === WALL || tool === STONE || tool === PLANT;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        const x = cx + dx, y = cy + dy;
+        if (!inBounds(x, y)) continue;
+        const i = y * W + x;
+        if (tool === ERASER) { type[i] = EMPTY; continue; }
+        if (type[i] !== EMPTY) continue;
+        if (!solid && rand() > 0.45) continue; // grainy pour
+        set(i, tool);
+      }
+    }
+  }
+
+  function paintLine(x0, y0, x1, y1, tool) {
+    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+    for (let s = 0; s <= steps; s++) {
+      paintAt(Math.round(x0 + (x1 - x0) * s / steps), Math.round(y0 + (y1 - y0) * s / steps), tool);
+    }
+  }
+
+  let drawing = false, px = 0, py = 0;
+  function gridPos(e) {
+    const r = canvas.getBoundingClientRect();
+    return [
+      Math.floor((e.clientX - r.left) / r.width * W),
+      Math.floor((e.clientY - r.top) / r.height * H),
+    ];
+  }
+  canvas.addEventListener('pointerdown', e => {
+    drawing = true;
+    canvas.setPointerCapture(e.pointerId);
+    [px, py] = gridPos(e);
+    paintAt(px, py, current);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    const [x, y] = gridPos(e);
+    paintLine(px, py, x, y, current);
+    px = x; py = y;
+  });
+  const stop = () => { drawing = false; };
+  canvas.addEventListener('pointerup', stop);
+  canvas.addEventListener('pointercancel', stop);
+
+  // ---------- Demo scene ----------
+  function fillRect(x0, y0, x1, y1, t) {
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++)
+        if (inBounds(x, y)) set(y * W + x, t);
+  }
+  function thickLine(x0, y0, x1, y1, t, w) {
+    const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    for (let s = 0; s <= steps; s++) {
+      const x = Math.round(x0 + (x1 - x0) * s / steps);
+      const y = Math.round(y0 + (y1 - y0) * s / steps);
+      fillRect(x, y, x, y + w - 1, t);
+    }
+  }
+  function demoScene() {
+    clearAll();
+    // Stone bowl filled with water, topped with a layer of oil
+    fillRect(90, 98, 92, 146, WALL);
+    fillRect(170, 98, 172, 146, WALL);
+    fillRect(90, 146, 172, 148, WALL);
+    fillRect(93, 120, 169, 145, WATER);
+    fillRect(93, 108, 169, 119, OIL);
+    // Volcano ramp on the left, carrying lava toward the bowl
+    thickLine(4, 38, 110, 84, WALL, 3);
+    fillRect(8, 14, 38, 36, LAVA);
+    // A little garden on the right
+    fillRect(180, 140, 239, 149, PLANT);
+    for (let k = 0; k < 4; k++) {
+      const x = 188 + k * 14, h = 18 + ((rand() * 22) | 0);
+      fillRect(x, 140 - h, x + 1, 139, PLANT);
+    }
+    // Sand pile falling into the garden
+    fillRect(205, 4, 225, 24, SAND);
+    selectTool(FIRE);
+  }
+
+  // ---------- Main loop ----------
+  const stats = document.getElementById('stats');
+  let last = performance.now(), fps = 60;
+  function loop(now) {
+    if (drawing) paintAt(px, py, current); // hold to keep pouring
+    if (!paused) { step(); frame++; }
+    render();
+    fps = fps * 0.9 + (1000 / Math.max(1, now - last)) * 0.1;
+    last = now;
+    if ((frame & 15) === 0) {
+      let count = 0;
+      for (let i = 0; i < N; i++) if (type[i] !== EMPTY) count++;
+      stats.textContent = `${count.toLocaleString()} particles · ${fps.toFixed(0)} fps`;
+    }
+    requestAnimationFrame(loop);
+  }
+  demoScene();
+  selectTool(SAND);
+  requestAnimationFrame(loop);
+})();
+</script>
 </body>
 </html>
