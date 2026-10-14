@@ -47,7 +47,7 @@
   /* ---------- Stats panel ---------- */
   .panel {
     position: fixed; top: 16px; left: 16px;
-    width: 270px; padding: 16px 18px;
+    width: 310px; padding: 16px 18px;
   }
   .title {
     margin: 0 0 12px;
@@ -90,7 +90,36 @@
     margin-top: 14px; margin-bottom: 4px;
     font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
   }
-  #chart { position: static; width: 100%; height: 54px; cursor: default; }
+  .chart-label { display: flex; justify-content: space-between; align-items: center; }
+  .chart-label .live {
+    display: inline-flex; align-items: center; gap: 5px;
+    color: var(--green); letter-spacing: 0.1em;
+  }
+  .chart-label .live::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 8px var(--green);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  #chart {
+    position: static; width: 100%; height: 140px; cursor: default;
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(0,240,255,0.04), rgba(255,43,214,0.03));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .select {
+    appearance: none; -webkit-appearance: none;
+    padding: 8px 30px 8px 14px; border-radius: 9px;
+    border: 1px solid rgba(0,240,255,0.35);
+    background:
+      linear-gradient(45deg, transparent 50%, var(--cyan) 50%) right 15px center / 5px 5px no-repeat,
+      linear-gradient(-45deg, transparent 50%, var(--cyan) 50%) right 10px center / 5px 5px no-repeat,
+      rgba(0,240,255,0.07);
+    color: var(--text); font: inherit; font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; transition: box-shadow 0.2s;
+  }
+  .select:hover, .select:focus { outline: none; box-shadow: 0 0 14px rgba(0,240,255,0.35); }
+  .select option { background: #12141e; color: var(--text); }
 
   /* ---------- Buttons ---------- */
   .corner {
@@ -168,17 +197,25 @@
       <div class="progress-head"><span>Generation timer</span><span id="timer">0.0s</span></div>
       <div class="progress"><div class="progress-bar" id="bar"></div></div>
     </div>
-    <div class="chart-label">Best fitness per generation</div>
+    <div class="chart-label"><span>Evolution analytics</span><span class="live">LIVE</span></div>
     <canvas id="chart"></canvas>
   </div>
 
   <a class="corner glass" href="sand.html"><span class="dot"></span>Play Falling Sand</a>
 
   <div class="hint glass">
-    <b>Drag</b> to draw walls · <b>Right-drag</b> to erase · <b>Space</b> pause · <b>C</b> clear · <b>R</b> restart
+    <b>Drag</b> to draw walls · <b>Right-drag</b> to erase · <b>1–5</b> presets · <b>Space</b> pause · <b>C</b> clear · <b>R</b> restart
   </div>
 
   <div class="controls glass">
+    <select class="select" id="presetSel" title="Load an obstacle course">
+      <option value="" selected disabled>Presets</option>
+      <option value="bar">1 · Classic Bar</option>
+      <option value="trap">2 · U-Shape Trap</option>
+      <option value="maze">3 · Random Maze</option>
+      <option value="asteroids">4 · Asteroid Field</option>
+      <option value="empty">5 · Empty Arena</option>
+    </select>
     <button class="btn" id="speedBtn">Speed 1×</button>
     <button class="btn" id="pauseBtn">Pause</button>
     <button class="btn danger" id="clearBtn">Clear walls</button>
@@ -255,7 +292,92 @@
   // Line segments drawn by the user: {x1, y1, x2, y2}
   let walls = [];
   function defaultWalls() {
-    walls = [{ x1: 560, y1: 470, x2: 1040, y2: 470 }];
+    walls = PRESETS.bar.build();
+  }
+
+  // ================= Obstacle course presets =================
+  const seg = (x1, y1, x2, y2) => ({ x1, y1, x2, y2 });
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // A full-width barrier at height y with openings at the given x-centres
+  function barrierWithGaps(y, gapCentres, gapW) {
+    const out = [];
+    let x = 0;
+    for (const c of gapCentres.sort((a, b) => a - b)) {
+      if (c - gapW / 2 > x) out.push(seg(x, y, c - gapW / 2, y));
+      x = c + gapW / 2;
+    }
+    if (x < WW) out.push(seg(x, y, WW, y));
+    return out;
+  }
+
+  // A closed polygon (used for asteroid rocks)
+  function rock(cx, cy, r) {
+    const n = 7 + ((Math.random() * 4) | 0), pts = [];
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2, rr = r * rnd(0.65, 1.1);
+      pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+    }
+    return pts.map((p, k) => seg(p[0], p[1], pts[(k + 1) % n][0], pts[(k + 1) % n][1]));
+  }
+
+  const PRESETS = {
+    bar: { name: 'Classic Bar', build: () => [seg(560, 470, 1040, 470)] },
+    trap: {
+      name: 'U-Shape Trap',
+      build: () => [
+        seg(520, 330, 1080, 330),    // roof of the cup facing the agents
+        seg(520, 330, 520, 610),
+        seg(1080, 330, 1080, 610),
+        seg(250, 200, 420, 200),     // side deflectors
+        seg(1180, 200, 1350, 200),
+      ],
+    },
+    maze: {
+      name: 'Random Maze',
+      build: () => {
+        const out = [];
+        const rows = [300, 560];
+        const flip = Math.random() < 0.5;
+        rows.forEach((y, r) => {
+          // three random openings per row; the middle ones are offset so there is no straight shot
+          const mid = (r === 0) === flip ? rnd(640, 720) : rnd(880, 960);
+          const gaps = [rnd(200, 420), mid, rnd(1180, 1400)];
+          out.push(...barrierWithGaps(y, gaps, 210));
+          // vertical stubs hanging below each row make the corridors twistier
+          const nextY = rows[r + 1] ?? 780;
+          for (let k = 0; k < 3; k++) {
+            const x = (gaps[k] + (gaps[k + 1] ?? WW - 60)) / 2 + rnd(-60, 60);
+            out.push(seg(x, y, x, y + (nextY - y) * rnd(0.3, 0.5)));
+          }
+        });
+        return out;
+      },
+    },
+    asteroids: {
+      name: 'Asteroid Field',
+      build: () => {
+        const out = [], placed = [];
+        let tries = 0;
+        while (placed.length < 22 && tries++ < 600) {
+          const x = rnd(80, WW - 80), y = rnd(190, WH - 170), r = rnd(22, 48);
+          if (placed.some(p => Math.hypot(p.x - x, p.y - y) < p.r + r + 55)) continue;
+          if (Math.hypot(x - START.x, y - START.y) < 160) continue;
+          placed.push({ x, y, r });
+          out.push(...rock(x, y, r));
+        }
+        return out;
+      },
+    },
+    empty: { name: 'Empty Arena', build: () => [] },
+  };
+
+  function loadPreset(key) {
+    const p = PRESETS[key];
+    if (!p) return;
+    walls = p.build();
+    trailClear = true;
+    announce(`<span class="gen">Preset loaded</span> · ${p.name}`);
   }
 
   function distToSegSq(x, y, s) {
@@ -333,7 +455,8 @@
     }
     allTimeBest = Math.max(allTimeBest, bestScore);
     history.push(bestScore);
-    if (history.length > 60) history.shift();
+    if (history.length > 120) history.shift();
+    chartAnimStart = performance.now();
     showToast(generation, reachedCount);
 
     // 2. Elitism: keep the very best genomes as-is
@@ -393,6 +516,107 @@
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, offX * dpr, offY * dpr);
   }
 
+  // ---------- Quantum portal (the goal) ----------
+  const TAU = Math.PI * 2;
+  const PORTAL_OUTER = 130;
+  function newMote(anywhere) {
+    return {
+      a: Math.random() * TAU,
+      r: anywhere ? rnd(TARGET.r, PORTAL_OUTER) : rnd(PORTAL_OUTER * 0.8, PORTAL_OUTER),
+      s: rnd(0.5, 1.4),
+      c: Math.random() < 0.5 ? 0 : 1,
+    };
+  }
+  const motes = Array.from({ length: 110 }, () => newMote(true));
+  const RING_COLORS = ['0, 240, 255', '255, 43, 214', '176, 38, 255'];
+
+  function drawPortal(time) {
+    const t = time / 1000;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
+    ctx.save();
+    ctx.translate(TARGET.x, TARGET.y);
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Gravitational glow
+    const glow = ctx.createRadialGradient(0, 0, TARGET.r * 0.5, 0, 0, PORTAL_OUTER * (1 + pulse * 0.15));
+    glow.addColorStop(0, 'rgba(176, 38, 255, 0.45)');
+    glow.addColorStop(0.4, 'rgba(255, 43, 214, 0.12)');
+    glow.addColorStop(1, 'rgba(0, 240, 255, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, PORTAL_OUTER * 1.2, 0, TAU); ctx.fill();
+
+    // Spiral arms winding into the core
+    ctx.lineWidth = 2;
+    for (let arm = 0; arm < 4; arm++) {
+      ctx.strokeStyle = `rgba(${RING_COLORS[arm % 2]}, 0.22)`;
+      ctx.beginPath();
+      for (let k = 0; k <= 40; k++) {
+        const f = k / 40;
+        const r = TARGET.r + f * (PORTAL_OUTER - TARGET.r);
+        const a = arm * (TAU / 4) - t * 1.6 + f * 3.4;
+        const x = Math.cos(a) * r, y = Math.sin(a) * r;
+        k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // Particles spiralling inward, speeding up as they fall
+    for (let c = 0; c < 2; c++) {
+      ctx.strokeStyle = `rgba(${RING_COLORS[c]}, 0.9)`;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      for (const m of motes) {
+        if (c === 0) {
+          const pull = PORTAL_OUTER / m.r;
+          m.a += 0.012 * m.s * pull;
+          m.r -= 0.28 * m.s * pull;
+          if (m.r < TARGET.r * 0.85) Object.assign(m, newMote(false));
+        }
+        if (m.c !== c) continue;
+        const len = Math.min(0.5, 6 / m.r);
+        ctx.moveTo(Math.cos(m.a - len) * m.r, Math.sin(m.a - len) * m.r);
+        ctx.arc(0, 0, m.r, m.a - len, m.a);
+      }
+      ctx.stroke();
+    }
+
+    // Counter-rotating segmented rings
+    ctx.shadowBlur = 14;
+    for (let k = 0; k < 3; k++) {
+      const r = TARGET.r + 14 + k * 17 + pulse * (3 - k);
+      const rot = t * (k % 2 ? -1 : 1) * (1.4 - k * 0.3);
+      const pieces = 3 + k;
+      ctx.strokeStyle = `rgba(${RING_COLORS[k]}, ${0.75 - k * 0.15})`;
+      ctx.shadowColor = `rgb(${RING_COLORS[k]})`;
+      ctx.lineWidth = 3 - k * 0.6;
+      for (let p = 0; p < pieces; p++) {
+        const a0 = rot + (p / pieces) * TAU;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, a0, a0 + (TAU / pieces) * 0.6);
+        ctx.stroke();
+      }
+    }
+
+    // Event horizon: black core with a blazing rim
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowBlur = 0;
+    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, TARGET.r);
+    core.addColorStop(0, '#000');
+    core.addColorStop(0.75, '#05020a');
+    core.addColorStop(1, 'rgba(60, 10, 90, 1)');
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(0, 0, TARGET.r, 0, TAU); ctx.fill();
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 18 + pulse * 14;
+    ctx.strokeStyle = `rgba(220, 250, 255, ${0.7 + pulse * 0.3})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 0, TARGET.r + pulse * 2, 0, TAU); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
   function render(time) {
     // Fade the previous frame instead of clearing: this leaves light trails behind agents
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -413,18 +637,7 @@
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(START.x, START.y, 14, 0, Math.PI * 2); ctx.stroke();
 
-    // Pulsating target
-    const pulse = 0.5 + 0.5 * Math.sin(time / 260);
-    const glowR = TARGET.r * (2.6 + pulse * 1.4);
-    const grad = ctx.createRadialGradient(TARGET.x, TARGET.y, 0, TARGET.x, TARGET.y, glowR);
-    grad.addColorStop(0, 'rgba(57, 255, 20, 0.9)');
-    grad.addColorStop(0.35, 'rgba(57, 255, 20, 0.35)');
-    grad.addColorStop(1, 'rgba(57, 255, 20, 0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(TARGET.x, TARGET.y, glowR, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = `rgba(200, 255, 190, ${0.6 + pulse * 0.4})`;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(TARGET.x, TARGET.y, TARGET.r * (0.8 + pulse * 0.25), 0, Math.PI * 2); ctx.stroke();
+    drawPortal(time);
 
     // Walls: violet glow with a bright core
     if (walls.length) {
@@ -517,45 +730,136 @@
     const r = chart.getBoundingClientRect();
     chart.width = Math.max(1, Math.floor(r.width * dpr));
     chart.height = Math.max(1, Math.floor(r.height * dpr));
-    drawChart();
+    drawChart(performance.now());
   }
-  function drawChart() {
-    const w = chart.width, h = chart.height;
+  let chartAnimStart = 0;
+  // Best score of the generation that is currently running (for the live point)
+  function liveBest() {
+    let b = 0;
+    for (let i = 0; i < POP; i++) { const v = scoreOf(i); if (v > b) b = v; }
+    return b;
+  }
+
+  function drawChart(now) {
+    const w = chart.width, h = chart.height, d = dpr;
+    const padL = 26 * d, padR = 10 * d, padT = 10 * d, padB = 16 * d;
+    const pw = w - padL - padR, ph = h - padT - padB;
+    const MAXY = 150;
+    const ys = v => padT + ph - (Math.min(v, MAXY) / MAXY) * ph;
+    cctx.setTransform(1, 0, 0, 1, 0, 0);
     cctx.clearRect(0, 0, w, h);
-    cctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    cctx.lineWidth = 1;
-    cctx.beginPath(); cctx.moveTo(0, h * (1 - 100 / 150)); cctx.lineTo(w, h * (1 - 100 / 150)); cctx.stroke();
-    if (history.length < 2) return;
-    const xs = i => (i / (history.length - 1)) * w;
-    const ys = v => h - 2 - (v / 150) * (h - 4);
-    const fill = cctx.createLinearGradient(0, 0, 0, h);
-    fill.addColorStop(0, 'rgba(255, 43, 214, 0.35)');
-    fill.addColorStop(1, 'rgba(255, 43, 214, 0)');
-    cctx.beginPath();
-    cctx.moveTo(0, h);
-    history.forEach((v, i) => cctx.lineTo(xs(i), ys(v)));
-    cctx.lineTo(w, h);
-    cctx.fillStyle = fill;
-    cctx.fill();
-    const line = cctx.createLinearGradient(0, 0, w, 0);
-    line.addColorStop(0, '#00f0ff'); line.addColorStop(1, '#ff2bd6');
-    cctx.beginPath();
-    history.forEach((v, i) => (i ? cctx.lineTo(xs(i), ys(v)) : cctx.moveTo(xs(i), ys(v))));
-    cctx.strokeStyle = line;
-    cctx.lineWidth = 2 * dpr;
-    cctx.stroke();
+    cctx.font = `${9 * d}px ui-monospace, Consolas, monospace`;
+    cctx.textBaseline = 'middle';
+
+    // Grid and y-axis labels
+    for (const v of [0, 50, 100, 150]) {
+      const y = ys(v);
+      cctx.strokeStyle = v === 100 ? 'rgba(57, 255, 20, 0.35)' : 'rgba(255, 255, 255, 0.07)';
+      cctx.setLineDash(v === 100 ? [4 * d, 4 * d] : []);
+      cctx.lineWidth = d;
+      cctx.beginPath(); cctx.moveTo(padL, y); cctx.lineTo(w - padR, y); cctx.stroke();
+      cctx.fillStyle = v === 100 ? 'rgba(57, 255, 20, 0.8)' : 'rgba(125, 138, 163, 0.9)';
+      cctx.textAlign = 'right';
+      cctx.fillText(v, padL - 5 * d, y);
+    }
+    cctx.setLineDash([]);
+    cctx.textAlign = 'right';
+    cctx.fillStyle = 'rgba(57, 255, 20, 0.6)';
+    cctx.fillText('TARGET', w - padR - 2 * d, ys(100) - 7 * d);
+
+    // Points: finished generations plus the generation currently running
+    const pts = history.slice();
+    const live = liveBest();
+    const n = pts.length + 1;               // include live point
+    const firstGen = generation - pts.length;
+    const xs = i => padL + (n <= 1 ? pw : (i / (n - 1)) * pw);
+
+    // X-axis labels
+    cctx.fillStyle = 'rgba(125, 138, 163, 0.9)';
+    cctx.textAlign = 'left';
+    cctx.fillText(`gen ${firstGen}`, padL, h - padB / 2);
+    cctx.textAlign = 'right';
+    cctx.fillText(`gen ${generation}`, w - padR, h - padB / 2);
+
+    if (pts.length) {
+      // The newest point eases in from the previous one
+      const k = Math.min(1, (now - chartAnimStart) / 450);
+      const ease = 1 - Math.pow(1 - k, 3);
+      const coords = pts.map((v, i) => [xs(i), ys(v)]);
+      if (coords.length > 1) {
+        const last = coords.length - 1, prev = coords[last - 1];
+        coords[last] = [prev[0] + (coords[last][0] - prev[0]) * ease, prev[1] + (coords[last][1] - prev[1]) * ease];
+      }
+
+      // Area under the curve
+      const fill = cctx.createLinearGradient(0, padT, 0, padT + ph);
+      fill.addColorStop(0, 'rgba(255, 43, 214, 0.32)');
+      fill.addColorStop(1, 'rgba(0, 240, 255, 0)');
+      cctx.beginPath();
+      cctx.moveTo(coords[0][0], padT + ph);
+      for (const [x, y] of coords) cctx.lineTo(x, y);
+      cctx.lineTo(coords[coords.length - 1][0], padT + ph);
+      cctx.closePath();
+      cctx.fillStyle = fill;
+      cctx.fill();
+
+      // Glowing neon line
+      const line = cctx.createLinearGradient(padL, 0, w - padR, 0);
+      line.addColorStop(0, '#00f0ff');
+      line.addColorStop(1, '#ff2bd6');
+      cctx.strokeStyle = line;
+      cctx.lineJoin = 'round';
+      cctx.lineCap = 'round';
+      cctx.shadowColor = '#ff2bd6';
+      cctx.shadowBlur = 10 * d;
+      cctx.lineWidth = 2.2 * d;
+      cctx.beginPath();
+      coords.forEach(([x, y], i) => (i ? cctx.lineTo(x, y) : cctx.moveTo(x, y)));
+      cctx.stroke();
+      cctx.shadowBlur = 0;
+
+      // Dashed link to the live point
+      const [lx, ly] = coords[coords.length - 1];
+      cctx.setLineDash([3 * d, 3 * d]);
+      cctx.strokeStyle = 'rgba(57, 255, 20, 0.6)';
+      cctx.lineWidth = 1.2 * d;
+      cctx.beginPath(); cctx.moveTo(lx, ly); cctx.lineTo(xs(n - 1), ys(live)); cctx.stroke();
+      cctx.setLineDash([]);
+
+      // Glowing dot on the latest finished generation
+      cctx.fillStyle = '#ffffff';
+      cctx.shadowColor = '#ff2bd6';
+      cctx.shadowBlur = 12 * d;
+      cctx.beginPath(); cctx.arc(lx, ly, 3 * d, 0, TAU); cctx.fill();
+      cctx.shadowBlur = 0;
+    }
+
+    // Pulsing live point for the running generation
+    const pulse = 0.5 + 0.5 * Math.sin(now / 180);
+    const x = xs(n - 1), y = ys(live);
+    cctx.fillStyle = `rgba(57, 255, 20, ${0.15 + pulse * 0.2})`;
+    cctx.beginPath(); cctx.arc(x, y, (5 + pulse * 3) * d, 0, TAU); cctx.fill();
+    cctx.fillStyle = '#39ff14';
+    cctx.beginPath(); cctx.arc(x, y, 2.5 * d, 0, TAU); cctx.fill();
+
+    // Value label beside the live point
+    cctx.fillStyle = '#e6f7ff';
+    cctx.textAlign = 'right';
+    cctx.fillText(live.toFixed(1), x - 8 * d, Math.max(padT + 5 * d, y - 9 * d));
   }
 
   const toast = $('toast');
   let toastTimer;
-  function showToast(gen, hits) {
-    toast.innerHTML = hits
-      ? `<span class="gen">Generation ${gen}</span> · <span class="hit">${hits} reached the target</span>`
-      : `<span class="gen">Generation ${gen}</span> · evolving…`;
+  function announce(html) {
+    toast.innerHTML = html;
     toast.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.remove('show'), 1600);
-    drawChart();
+  }
+  function showToast(gen, hits) {
+    announce(hits
+      ? `<span class="gen">Generation ${gen}</span> · <span class="hit">${hits} reached the target</span>`
+      : `<span class="gen">Generation ${gen}</span> · evolving…`);
   }
 
   // ================= Controls =================
@@ -575,9 +879,18 @@
   pauseBtn.onclick = togglePause;
   $('clearBtn').onclick = clearWalls;
   $('resetBtn').onclick = resetAI;
+  const presetSel = $('presetSel');
+  presetSel.onchange = () => {
+    loadPreset(presetSel.value);
+    presetSel.value = '';      // allow picking the same preset again (e.g. a new random maze)
+    presetSel.blur();
+  };
+  const PRESET_KEYS = { 1: 'bar', 2: 'trap', 3: 'maze', 4: 'asteroids', 5: 'empty' };
 
   document.addEventListener('keydown', e => {
-    if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+    if (e.target.tagName === 'SELECT') return;
+    if (PRESET_KEYS[e.key]) loadPreset(PRESET_KEYS[e.key]);
+    else if (e.code === 'Space') { e.preventDefault(); togglePause(); }
     else if (e.key === 'c' || e.key === 'C') clearWalls();
     else if (e.key === 'r' || e.key === 'R') resetAI();
     else if (e.key === 's' || e.key === 'S') cycleSpeed();
@@ -629,10 +942,11 @@
         steps++;
         if (steps > 1) render(now); // keep trails continuous at higher speeds
       }
-      if (steps > 1) { updateUI(); requestAnimationFrame(loop); return; }
+      if (steps > 1) { updateUI(); drawChart(now); requestAnimationFrame(loop); return; }
     }
     render(now);
     updateUI();
+    drawChart(now);
     requestAnimationFrame(loop);
   }
 
